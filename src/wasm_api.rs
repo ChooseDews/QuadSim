@@ -96,13 +96,15 @@ impl Default for BrowserSimulationConfig {
                     pitch_deg: 3.0,
                     yaw_deg: 0.0,
                 },
+                BrowserTimelineEvent::FrontFlip { time_s: 12.0 },
+                BrowserTimelineEvent::FrontFlip { time_s: 18.0 },
                 BrowserTimelineEvent::Setpoint {
-                    time_s: 18.0,
-                    altitude_m: 30.0,
-                    roll_deg: 2.0,
-                    pitch_deg: 3.0,
+                    time_s: 20.0,
+                    altitude_m: 10.0,
+                    roll_deg: -10.0,
+                    pitch_deg: 10.0,
                     yaw_deg: 0.0,
-                }
+                },
             ],
         }
     }

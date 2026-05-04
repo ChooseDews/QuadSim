@@ -37,10 +37,16 @@ pub struct HelixManeuver {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct LandManeuver {
+    pub start_time_s: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum MissionAction {
     Setpoint(AttitudeSetpoint),
     FrontFlip(FrontFlipManeuver),
     Helix(HelixManeuver),
+    Land(LandManeuver),
 }
 
 impl MissionAction {
@@ -49,6 +55,7 @@ impl MissionAction {
             MissionAction::Setpoint(s) => s.start_time_s,
             MissionAction::FrontFlip(f) => f.start_time_s,
             MissionAction::Helix(h) => h.start_time_s,
+            MissionAction::Land(l) => l.start_time_s,
         }
     }
 }
@@ -75,11 +82,23 @@ impl Default for QuadController {
                     yaw_rad: 0.0,
                     yaw_rate_rad_s: 0.0,
                 }),
-                MissionAction::Setpoint(AttitudeSetpoint {
+                MissionAction::FrontFlip(FrontFlipManeuver {
+                    start_time_s: 12.0,
+                    duration_s: 1.45,
+                    thrust_factor: 1.24,
+                    max_pitch_torque_nm: 1.85,
+                }),
+                MissionAction::FrontFlip(FrontFlipManeuver {
                     start_time_s: 18.0,
-                    altitude_m: 30.0,
-                    roll_rad: 2.0_f64.to_radians(),
-                    pitch_rad: 3.0_f64.to_radians(),
+                    duration_s: 1.45,
+                    thrust_factor: 1.24,
+                    max_pitch_torque_nm: 1.85,
+                }),
+                MissionAction::Setpoint(AttitudeSetpoint {
+                    start_time_s: 20.0,
+                    altitude_m: 10.0,
+                    roll_rad: (-10.0_f64).to_radians(),
+                    pitch_rad: 10.0_f64.to_radians(),
                     yaw_rad: 0.0,
                     yaw_rate_rad_s: 0.0,
                 }),
@@ -144,6 +163,7 @@ impl QuadController {
                 }
             }
             MissionAction::Setpoint(_) => {}
+            MissionAction::Land(_) => {}
         }
 
         // Default Setpoint Tracking (either active action is a setpoint, or maneuver expired)

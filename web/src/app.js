@@ -64,10 +64,11 @@ export class DashboardApp {
 
     this.timeline = [
       { id: 1, type: "setpoint", time_s: 0.0, altitude_m: 30.0, roll_deg: 0.0, pitch_deg: 3.0, yaw_deg: 0.0 },
-      { id: 2, type: "setpoint", time_s: 18.0, altitude_m: 30.0, roll_deg: 2.0, pitch_deg: 3.0, yaw_deg: 0.0 },
-      { id: 3, type: "helix", time_s: 10.0, duration_s: 15.0, radius_m: 3.0, forward_velocity_mps: 8.0, angular_velocity_rps: 0.6 }
+      { id: 2, type: "front_flip", time_s: 12.0 },
+      { id: 3, type: "front_flip", time_s: 18.0 },
+      { id: 4, type: "setpoint", time_s: 20.0, altitude_m: 10.0, roll_deg: -10.0, pitch_deg: 10.0, yaw_deg: 0.0 }
     ];
-    this.nextTimelineId = 4;
+    this.nextTimelineId = 5;
   }
 
   bindEvents() {
