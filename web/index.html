@@ -3,12 +3,75 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QuadSim Telemetry Deck</title>
+  <title>QuadSim — Quadcopter simulation &amp; flight control</title>
+  <meta
+    name="description"
+    content="QuadSim is a browser-based quadcopter simulation and flight-control lab: configure physics and missions, run the sim in WebAssembly, and explore 3D flight with synced telemetry charts."
+  />
+  <meta
+    name="keywords"
+    content="QuadSim, quadcopter simulation, drone simulator, flight control, PID, telemetry, WebAssembly, Three.js, browser simulation"
+  />
+  <meta name="author" content="John Dews-Flick" />
+  <meta name="creator" content="John Dews-Flick" />
+  <meta name="publisher" content="John Dews-Flick" />
+  <link rel="author" href="https://johndews.com/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="googlebot" content="index, follow" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="QuadSim" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="QuadSim — Quadcopter simulation &amp; flight control" />
+  <meta
+    property="og:description"
+    content="Interactive quadcopter simulation and controller tuning in the browser: 3D view, mission timeline, and live telemetry charts powered by Rust/WebAssembly."
+  />
+  <meta property="og:image" content="quad_sim_logo.png" />
+  <meta property="og:image:alt" content="QuadSim — quadcopter illustration with thrust, gravity, and control cues" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="QuadSim — Quadcopter simulation &amp; flight control" />
+  <meta
+    name="twitter:description"
+    content="Interactive quadcopter simulation and controller tuning in the browser: 3D view, mission timeline, and live telemetry charts."
+  />
+  <meta name="twitter:image" content="quad_sim_logo.png" />
+
+  <link rel="icon" type="image/png" href="./quad_sim_logo.png" />
+  <link rel="apple-touch-icon" href="./quad_sim_logo.png" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "QuadSim",
+      "description": "Browser-based quadcopter simulation and flight-control dashboard with 3D visualization and telemetry charts.",
+      "applicationCategory": "SimulationApplication",
+      "operatingSystem": "Web browser",
+      "browserRequirements": "Requires JavaScript. Uses WebAssembly for the physics simulation.",
+      "author": {
+        "@type": "Person",
+        "name": "John Dews-Flick",
+        "url": "https://johndews.com/"
+      },
+      "creator": {
+        "@type": "Person",
+        "name": "John Dews-Flick",
+        "url": "https://johndews.com/"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  </script>
 </head>
 <body>
-  <div class="footer-attribution" style="position: absolute; top: 12px; right: 24px; font-size: 0.65rem; color: var(--muted); z-index: 1000; pointer-events: auto;">
-    Made with love by <a href="https://johndews.com" target="_blank" style="color: var(--accent-2); text-decoration: none; font-weight: bold;">John Dews-Flick</a> 2026
-  </div>
   <div class="dashboard-shell" id="dashboardShell">
     <main class="primary-column" id="primaryColumn">
       <article class="panel scene-panel">
@@ -129,9 +192,18 @@
 
     <aside class="telemetry-column chart-column" id="chartColumn">
       <section class="panel chart-panel">
-        <div class="panel-header" style="justify-content: flex-start; gap: 16px;">
-          <p class="eyebrow" style="margin: 0;">Analysis</p>
-          <div class="chart-panel-tools" style="display: flex; gap: 8px; align-items: center; margin-left: -8px;">
+        <div class="panel-header chart-panel-header">
+          <div class="chart-panel-brand">
+            <img class="chart-panel-logo" src="./quad_sim_logo.png" alt="" decoding="async" />
+            <div class="chart-panel-heading">
+              <p class="eyebrow">QuadSim</p>
+              <p class="chart-panel-subtitle">Quadcopter simulation and flight control</p>
+              <p class="chart-panel-attribution">
+                Made with love by <a href="https://johndews.com" target="_blank" rel="noopener noreferrer">John Dews-Flick</a> · 2026
+              </p>
+            </div>
+          </div>
+          <div class="chart-panel-tools">
             <label class="sync-hover-label" style="display: flex; align-items: center; gap: 4px; font-size: 0.65rem; color: var(--muted); cursor: pointer; margin-right: 4px;">
               <input type="checkbox" id="syncHoverCheckbox" checked /> Sync 3D
             </label>
