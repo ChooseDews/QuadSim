@@ -1,0 +1,506 @@
+:root {
+  color-scheme: dark;
+  --bg: #04070a;
+  --panel: #090d12;
+  --panel-2: #0e1319;
+  --surface: #06090d;
+  --line: #141b23;
+  --line-strong: #1d2732;
+  --text: #edf1f6;
+  --muted: #677586;
+  --accent: #42637f;
+  --accent-2: #90a9c2;
+  --accent-3: #ba9470;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+}
+
+body {
+  overflow: hidden;
+}
+
+.dashboard-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  height: 100vh;
+  padding: 0;
+}
+
+.scene-column,
+.telemetry-column {
+  min-height: 0;
+}
+
+.telemetry-column {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  overflow-y: auto;
+  background: #04070a;
+}
+
+.topbar,
+.control-strip,
+.panel,
+.metric-card,
+.detail-card,
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #8ea2b6;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.62rem;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.25rem, 1.85vw, 1.65rem);
+  line-height: 1;
+}
+
+h2 {
+  font-size: 0.96rem;
+  letter-spacing: 0.01em;
+}
+
+.status-pill {
+  align-self: flex-start;
+  padding: 4px 7px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  color: var(--accent-2);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.status-pill[data-state="busy"] {
+  color: var(--accent-3);
+}
+
+.status-pill[data-state="error"] {
+  color: #ff9baa;
+}
+
+.control-strip,
+.panel {
+  padding: 8px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+
+.config-grid label {
+  display: grid;
+  gap: 3px;
+}
+
+.slider-field {
+  grid-column: span 2;
+}
+
+.config-grid span,
+.metric-label {
+  color: var(--muted);
+  font-size: 0.61rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.config-grid strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input[type="number"],
+select,
+input[type="range"] {
+  width: 100%;
+}
+
+input[type="number"],
+select {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 5px 7px;
+  background: var(--surface);
+  color: var(--text);
+  min-height: 30px;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+  min-height: 20px;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 9px;
+  cursor: pointer;
+  font-weight: 700;
+  color: #dfe8ef;
+  background: var(--accent);
+  min-height: 30px;
+}
+
+button.secondary {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.primary-action {
+  min-height: 30px;
+}
+
+.run-button {
+  grid-column: span 2;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+}
+
+.metric-card,
+.detail-card {
+  background: var(--panel-2);
+  padding: 7px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 4px;
+}
+
+.metric-value,
+.detail-value {
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.detail-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.telemetry-panel,
+.chart-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.chart-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scene-header-tools {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.view-controls {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 0;
+  border: 1px solid var(--line-strong);
+}
+
+.view-controls button {
+  min-width: 74px;
+  background: var(--panel-2);
+  border: 0;
+  border-right: 1px solid var(--line);
+}
+
+.view-controls button:last-child {
+  border-right: 0;
+}
+
+.view-controls button.active {
+  background: var(--accent);
+  color: #f3f6fa;
+}
+
+.readout-block {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.scene-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #050a0f;
+}
+
+.transport-bar {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 5px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+.chart-card {
+  overflow: hidden;
+  background: var(--surface);
+  min-height: 214px;
+}
+
+.chart-host {
+  width: 100%;
+  min-height: 214px;
+}
+
+.lw-chart-host {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.plot-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 8px 10px 2px;
+}
+
+.plot-title {
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.plot-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-legend-swatch {
+  width: 10px;
+  height: 2px;
+  display: inline-block;
+}
+
+.plot-legend-label {
+  color: var(--text);
+}
+
+.plot-legend-value {
+  color: var(--muted);
+}
+
+.plot-selection {
+  color: var(--accent-2);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.plot-canvas {
+  min-height: 176px;
+}
+
+.fatal-error {
+  margin: 12px;
+  padding: 16px;
+  border-radius: 0;
+  border: 1px solid #47222a;
+  background: #2b151b;
+  color: #ffd7de;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1180px) {
+  body {
+    overflow: auto;
+  }
+
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .scene-panel {
+    height: auto;
+    min-height: 70vh;
+  }
+
+  .telemetry-column {
+    overflow: visible;
+    background: transparent;
+  }
+
+  .config-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .plot-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .plot-legend {
+    justify-content: flex-start;
+  }
+
+  .chart-panel-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-shell {
+    gap: 1px;
+  }
+
+  .topbar,
+  .panel,
+  .control-strip {
+    padding: 10px;
+  }
+
+  .topbar,
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .readout-block {
+    text-align: left;
+  }
+
+  .config-grid,
+  .transport-bar,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .slider-field,
+  .run-button {
+    grid-column: span 1;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scene-header-tools {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .scene-canvas {
+    min-height: 340px;
+  }
+
+  .plot-canvas {
+    min-height: 164px;
+  }
+
+  .chart-panel-tools {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

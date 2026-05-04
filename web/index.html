@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuadSim Telemetry Deck</title>
+</head>
+<body>
+  <div class="dashboard-shell">
+    <section class="scene-column">
+      <article class="panel scene-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">3D View</p>
+            <h1>QuadSim Flight Deck</h1>
+          </div>
+          <div class="scene-header-tools">
+            <div class="view-controls">
+              <button type="button" id="viewTrackButton" class="secondary active">Track</button>
+              <button type="button" id="viewFollowButton" class="secondary">Follow</button>
+            </div>
+            <div class="readout-block">
+              <span id="sampleTimestamp">t = 0.00 s</span>
+              <span id="samplePose">x 0.00 | y 0.00 | z 0.00</span>
+            </div>
+          </div>
+        </div>
+        <div class="scene-canvas" id="sceneCanvas"></div>
+        <div class="transport-bar">
+          <button id="playPauseButton">Play</button>
+          <button id="stepBackButton" class="secondary">Back</button>
+          <button id="stepForwardButton" class="secondary">Forward</button>
+          <input id="timelineSlider" type="range" min="0" max="0" value="0" step="1" />
+        </div>
+      </article>
+    </section>
+
+    <aside class="telemetry-column">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Browser Telemetry</p>
+          <h2>Mission Console</h2>
+        </div>
+        <div class="status-pill" id="statusPill">Ready</div>
+      </header>
+
+      <section class="control-strip">
+        <form id="configForm" class="config-grid">
+          <label>
+            <span>Duration [s]</span>
+            <input name="duration_s" type="number" min="5" max="120" step="1" value="45" />
+          </label>
+          <label>
+            <span>dt [s]</span>
+            <input name="dt_s" type="number" min="0.002" max="0.05" step="0.001" value="0.01" />
+          </label>
+          <label>
+            <span>Altitude [m]</span>
+            <input name="altitude_m" type="number" min="5" max="120" step="1" value="30" />
+          </label>
+          <label class="slider-field">
+            <span>T/W Ratio <strong id="thrustToWeightValue">2.25</strong></span>
+            <input name="thrust_to_weight_ratio" id="thrustToWeightInput" type="range" min="1.4" max="4.0" step="0.05" value="2.25" />
+          </label>
+          <label>
+            <span>Pitch [deg]</span>
+            <input name="pitch_deg" type="number" min="-10" max="10" step="0.5" value="3" />
+          </label>
+          <label>
+            <span>Roll Step [deg]</span>
+            <input name="roll_step_deg" type="number" min="-10" max="10" step="0.5" value="2" />
+          </label>
+          <label>
+            <span>Roll Step Time [s]</span>
+            <input name="roll_step_time_s" type="number" min="0" max="120" step="0.5" value="18" />
+          </label>
+          <label>
+            <span>Yaw [deg]</span>
+            <input name="yaw_deg" type="number" min="-30" max="30" step="1" value="0" />
+          </label>
+          <label>
+            <span>Maneuver</span>
+            <select name="maneuver_mode">
+              <option value="front_flip" selected>Front Flip</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label>
+            <span>Flip Start [s]</span>
+            <input name="maneuver_start_s" type="number" min="0" max="120" step="0.5" value="10" />
+          </label>
+          <label>
+            <span>Steps / Tick</span>
+            <input name="steps_per_tick" type="number" min="1" max="500" step="1" value="30" />
+          </label>
+          <label class="slider-field">
+            <span>Linear Drag <strong id="linearDragValue">1.00</strong></span>
+            <input name="linear_drag_scale" id="linearDragInput" type="range" min="0.2" max="3" step="0.05" value="1" />
+          </label>
+          <label class="slider-field">
+            <span>Angular Drag <strong id="angularDragValue">1.00</strong></span>
+            <input name="angular_drag_scale" id="angularDragInput" type="range" min="0.2" max="3" step="0.05" value="1" />
+          </label>
+          <label class="slider-field">
+            <span>Throttle Noise σ <strong id="noiseValue">0.000</strong></span>
+            <input name="throttle_noise_std" id="noiseInput" type="range" min="0" max="0.15" step="0.0025" value="0" />
+          </label>
+          <button type="submit" class="primary-action run-button">Run Browser Simulation</button>
+          <button type="button" class="secondary primary-action run-button" id="liveRunButton">Run Live</button>
+        </form>
+      </section>
+
+      <article class="panel telemetry-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Flight State</p>
+            <h2>Overview</h2>
+          </div>
+          <div class="readout-block">
+            <span id="sampleSpeed">speed 0.00 m/s</span>
+            <span id="samplePower">power 0.0 W</span>
+          </div>
+        </div>
+        <div class="telemetry-stack">
+          <section class="metrics-grid" id="metricsGrid"></section>
+          <div class="detail-grid" id="detailGrid"></div>
+        </div>
+      </article>
+
+      <section class="panel chart-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Time History</p>
+            <h2>Telemetry Timelines</h2>
+          </div>
+          <div class="chart-panel-tools">
+            <button type="button" id="fitChartsButton" class="secondary">Full History</button>
+            <button type="button" id="centerChartsButton" class="secondary">Center Playhead</button>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card"><div id="positionChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="attitudeChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="velocityChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="angularRateChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="motorChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="powerChart" class="chart-host"></div></div>
+          <div class="chart-card"><div id="currentChart" class="chart-host"></div></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
