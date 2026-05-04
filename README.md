@@ -8,9 +8,7 @@ Browser-based quadcopter simulation and flight-control lab: **mission planner** 
 
 ## Demo
 
-<div align="center">
-  <video src="web/quad_sim_demo.mp4" width="640" height="345" controls></video>
-</div>
+[Demo Video](https://github.com/user-attachments/assets/bfc97819-52d0-4e4a-b1be-28fd821d49f2)
 
 ## Mission planner
 
