@@ -2,7 +2,6 @@ pub mod controller;
 pub mod math;
 pub mod motor;
 pub mod quadrotor;
-pub mod report;
 pub mod simulation;
 pub mod wasm_api;
 
@@ -10,7 +9,6 @@ pub use controller::{AttitudeSetpoint, QuadController};
 pub use math::{Attitude, Mat3, Mat4, Vec3};
 pub use motor::{Motor, SpinDirection};
 pub use quadrotor::Quadrotor;
-pub use report::ReportAssets;
 pub use simulation::{
     Sample, SimulationOptions, SimulationResult, State, simulate, simulate_with_options,
 };
