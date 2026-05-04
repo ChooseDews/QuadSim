@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use crate::controller::{AttitudeSetpoint, ManeuverMode, QuadController};
+use crate::controller::{AttitudeSetpoint, QuadController};
 use crate::quadrotor::Quadrotor;
 use crate::simulation::{Sample, SimulationOptions, SimulationRuntime, simulate_with_options};
 
@@ -9,17 +9,36 @@ use crate::simulation::{Sample, SimulationOptions, SimulationRuntime, simulate_w
 pub struct BrowserSimulationConfig {
     pub dt_s: f64,
     pub duration_s: f64,
-    pub altitude_m: f64,
     pub thrust_to_weight_ratio: f64,
-    pub pitch_deg: f64,
-    pub roll_step_deg: f64,
-    pub roll_step_time_s: f64,
-    pub yaw_deg: f64,
-    pub maneuver_mode: String,
-    pub maneuver_start_s: f64,
     pub linear_drag_scale: f64,
     pub angular_drag_scale: f64,
     pub throttle_noise_std: f64,
+    pub timeline: Vec<BrowserTimelineEvent>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum BrowserTimelineEvent {
+    #[serde(rename = "setpoint")]
+    Setpoint {
+        time_s: f64,
+        altitude_m: f64,
+        roll_deg: f64,
+        pitch_deg: f64,
+        yaw_deg: f64,
+    },
+    #[serde(rename = "front_flip")]
+    FrontFlip {
+        time_s: f64,
+    },
+    #[serde(rename = "helix")]
+    Helix {
+        time_s: f64,
+        duration_s: f64,
+        radius_m: f64,
+        forward_velocity_mps: f64,
+        angular_velocity_rps: f64,
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -65,45 +84,84 @@ impl Default for BrowserSimulationConfig {
         Self {
             dt_s: 0.01,
             duration_s: 45.0,
-            altitude_m: 30.0,
             thrust_to_weight_ratio: 2.25,
-            pitch_deg: 3.0,
-            roll_step_deg: 2.0,
-            roll_step_time_s: 18.0,
-            yaw_deg: 0.0,
-            maneuver_mode: "front_flip".to_owned(),
-            maneuver_start_s: 10.0,
             linear_drag_scale: 1.0,
             angular_drag_scale: 1.0,
             throttle_noise_std: 0.0,
+            timeline: vec![
+                BrowserTimelineEvent::Setpoint {
+                    time_s: 0.0,
+                    altitude_m: 30.0,
+                    roll_deg: 0.0,
+                    pitch_deg: 3.0,
+                    yaw_deg: 0.0,
+                },
+                BrowserTimelineEvent::Setpoint {
+                    time_s: 18.0,
+                    altitude_m: 30.0,
+                    roll_deg: 2.0,
+                    pitch_deg: 3.0,
+                    yaw_deg: 0.0,
+                }
+            ],
         }
     }
 }
 
 impl BrowserSimulationConfig {
     fn to_controller(&self) -> QuadController {
-        let mut controller = QuadController {
-            schedule: vec![
-                AttitudeSetpoint {
-                    start_time_s: 0.0,
-                    altitude_m: self.altitude_m,
-                    roll_rad: 0.0,
-                    pitch_rad: self.pitch_deg.to_radians(),
-                    yaw_rad: self.yaw_deg.to_radians(),
-                },
-                AttitudeSetpoint {
-                    start_time_s: self.roll_step_time_s,
-                    altitude_m: self.altitude_m,
-                    roll_rad: self.roll_step_deg.to_radians(),
-                    pitch_rad: self.pitch_deg.to_radians(),
-                    yaw_rad: self.yaw_deg.to_radians(),
-                },
-            ],
+        let mut timeline = Vec::new();
+
+        for event in &self.timeline {
+            match event {
+                BrowserTimelineEvent::Setpoint { time_s, altitude_m, roll_deg, pitch_deg, yaw_deg } => {
+                    timeline.push(crate::controller::MissionAction::Setpoint(AttitudeSetpoint {
+                        start_time_s: *time_s,
+                        altitude_m: *altitude_m,
+                        roll_rad: roll_deg.to_radians(),
+                        pitch_rad: pitch_deg.to_radians(),
+                        yaw_rad: yaw_deg.to_radians(),
+                        yaw_rate_rad_s: 0.0,
+                    }));
+                }
+                BrowserTimelineEvent::FrontFlip { time_s } => {
+                    timeline.push(crate::controller::MissionAction::FrontFlip(crate::controller::FrontFlipManeuver {
+                        start_time_s: *time_s,
+                        duration_s: 1.45,
+                        thrust_factor: 1.24,
+                        max_pitch_torque_nm: 1.85,
+                    }));
+                }
+                BrowserTimelineEvent::Helix { time_s, duration_s, radius_m, forward_velocity_mps, angular_velocity_rps } => {
+                    timeline.push(crate::controller::MissionAction::Helix(crate::controller::HelixManeuver {
+                        start_time_s: *time_s,
+                        duration_s: *duration_s,
+                        radius_m: *radius_m,
+                        angular_velocity_rps: *angular_velocity_rps,
+                        forward_velocity_mps: *forward_velocity_mps,
+                    }));
+                }
+            }
+        }
+
+        if timeline.is_empty() {
+            timeline.push(crate::controller::MissionAction::Setpoint(AttitudeSetpoint {
+                start_time_s: 0.0,
+                altitude_m: 30.0,
+                roll_rad: 0.0,
+                pitch_rad: 0.0,
+                yaw_rad: 0.0,
+                yaw_rate_rad_s: 0.0,
+            }));
+        }
+
+        // Sort by time
+        timeline.sort_by(|a, b| a.start_time_s().partial_cmp(&b.start_time_s()).unwrap());
+
+        QuadController {
+            timeline,
             ..QuadController::default()
-        };
-        controller.maneuver_mode = self.parse_maneuver_mode();
-        controller.front_flip.start_time_s = self.maneuver_start_s;
-        controller
+        }
     }
 
     fn to_simulation_options(&self) -> SimulationOptions {
@@ -112,13 +170,6 @@ impl BrowserSimulationConfig {
             angular_drag_scale: self.angular_drag_scale,
             throttle_noise_std: self.throttle_noise_std,
             noise_seed: 0x5eed_1234_5678_9abc,
-        }
-    }
-
-    fn parse_maneuver_mode(&self) -> ManeuverMode {
-        match self.maneuver_mode.as_str() {
-            "front_flip" => ManeuverMode::FrontFlip,
-            _ => ManeuverMode::None,
         }
     }
 }

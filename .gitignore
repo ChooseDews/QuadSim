@@ -3,3 +3,4 @@
 /dist
 /web/pkg
 .DS_STORE
+/output

@@ -14,6 +14,8 @@ export class QuadScene {
     this.viewMode = "track";
     this.lastFollowTarget = null;
     this.trajectoryMaterial = null;
+    this.vehicleScale = 2.4;
+    this.pathWidth = 4.5;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -39,7 +41,7 @@ export class QuadScene {
     this.simWorld.add(this.root);
 
     this.vehicleGroup = new THREE.Group();
-    this.vehicleGroup.scale.setScalar(2.4);
+    this.vehicleGroup.scale.setScalar(this.vehicleScale);
     this.simWorld.add(this.vehicleGroup);
 
     this.setupEnvironment();
@@ -53,7 +55,7 @@ export class QuadScene {
   }
 
   setupEnvironment() {
-    this.scene.background = new THREE.Color(0x101720);
+    this.scene.background = new THREE.Color(0x0f172a);
 
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(1200, 48, 32),
@@ -65,25 +67,25 @@ export class QuadScene {
     );
     this.scene.add(sky);
 
-    const ambient = new THREE.HemisphereLight(0x74879d, 0x090c10, 0.95);
+    const ambient = new THREE.HemisphereLight(0x94a3b8, 0x020617, 0.95);
     this.scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xa6bad1, 1.25);
+    const keyLight = new THREE.DirectionalLight(0xbfdbfe, 1.25);
     keyLight.position.set(14, -8, 18);
     keyLight.castShadow = true;
     this.scene.add(keyLight);
 
-    const rim = new THREE.DirectionalLight(0x5d7288, 0.35);
+    const rim = new THREE.DirectionalLight(0x64748b, 0.35);
     rim.position.set(-10, 18, 12);
     this.scene.add(rim);
 
-    const grid = new THREE.GridHelper(900, 90, 0x1b2430, 0x111820);
+    const grid = new THREE.GridHelper(900, 90, 0x334155, 0x1e293b);
     this.scene.add(grid);
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(1400, 1400),
       new THREE.MeshStandardMaterial({
-        color: 0x10151b,
+        color: 0x0f172a,
         metalness: 0.0,
         roughness: 0.98,
       }),
@@ -117,9 +119,11 @@ export class QuadScene {
 
     const throttles = [sample.m1, sample.m2, sample.m3, sample.m4];
     this.motorMeshes.forEach((mesh, index) => {
-      const intensity = throttles[index];
-      mesh.material.emissiveIntensity = 0.1 + intensity * 0.5;
-      mesh.material.color.setHSL(0.58 - intensity * 0.08, 0.35, 0.56);
+      const intensity = Math.max(0, Math.min(1, throttles[index]));
+      mesh.material.emissiveIntensity = 0.2 + intensity * 0.8;
+      // Hue goes from 0.66 (blue) to 0.0 (red)
+      mesh.material.color.setHSL(0.66 * (1.0 - intensity), 0.9, 0.5);
+      mesh.material.emissive.copy(mesh.material.color);
     });
 
     if (this.viewMode === "follow") {
@@ -148,7 +152,7 @@ export class QuadScene {
     trajectoryGeometry.setPositions(flatPositions);
     trajectoryGeometry.setColors(flatColors);
     this.trajectoryMaterial = new LineMaterial({
-      linewidth: 4.5,
+      linewidth: this.pathWidth,
       transparent: true,
       opacity: 0.98,
       vertexColors: true,
@@ -173,13 +177,15 @@ export class QuadScene {
     finishMarker.position.copy(points.at(-1));
     this.root.add(finishMarker);
   }
-
   buildVehicle(vehicle) {
     const frameMaterial = new THREE.MeshStandardMaterial({
       color: 0xc3ced9,
       metalness: 0.24,
       roughness: 0.62,
     });
+
+    this.vehicleGroup.scale.setScalar(this.vehicleScale);
+
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.34, 0.22, 0.045),
       frameMaterial,
@@ -204,10 +210,11 @@ export class QuadScene {
     for (const motor of vehicle.motors) {
       const position = new THREE.Vector3(...motor.position_body_m);
       const post = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.18, 10),
+        new THREE.CylinderGeometry(0.012, 0.012, 0.06, 10),
         postMaterial,
       );
-      post.position.set(position.x, position.y, 0.09);
+      post.position.set(position.x, position.y, 0.04);
+      post.rotation.x = Math.PI / 2;
       post.castShadow = true;
       this.vehicleGroup.add(post);
 
@@ -219,7 +226,7 @@ export class QuadScene {
           roughness: 0.82,
         }),
       );
-      foot.position.copy(position);
+      foot.position.set(position.x, position.y, -0.01);
       foot.castShadow = true;
       this.vehicleGroup.add(foot);
 
@@ -233,10 +240,22 @@ export class QuadScene {
           roughness: 0.76,
         }),
       );
-      hub.position.set(position.x, position.y, 0.18);
+      hub.position.set(position.x, position.y, 0.08);
       hub.castShadow = true;
       this.vehicleGroup.add(hub);
       this.motorMeshes.push(hub);
+    }
+  }
+
+  setVehicleScale(scale) {
+    this.vehicleScale = scale;
+    this.vehicleGroup.scale.setScalar(scale);
+  }
+
+  setPathWidth(width) {
+    this.pathWidth = width;
+    if (this.trajectoryMaterial) {
+      this.trajectoryMaterial.linewidth = width;
     }
   }
 
@@ -337,7 +356,7 @@ export class QuadScene {
     const up = new THREE.Vector3(0, 1, 0);
     const fore = new THREE.Vector3(1, 0, 0).applyQuaternion(worldQuaternion).normalize();
 
-    return side.multiplyScalar(9.5).add(up.multiplyScalar(3.2)).add(fore.multiplyScalar(0.6));
+    return side.multiplyScalar(0.0).add(up.multiplyScalar(4.0)).add(fore.multiplyScalar(-14.0));
   }
 
   resize() {
@@ -345,7 +364,7 @@ export class QuadScene {
     const height = Math.max(360, this.container.clientHeight);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    this.renderer.setSize(width, height);
     if (this.trajectoryMaterial) {
       this.trajectoryMaterial.resolution.set(width, height);
     }
@@ -354,7 +373,6 @@ export class QuadScene {
   animate() {
     requestAnimationFrame(this.animate);
     const delta = this.clock.getDelta();
-    this.controls.update();
 
     if (this.currentSample) {
       this.rotorPhase += delta * 20;
@@ -366,6 +384,7 @@ export class QuadScene {
       }
     }
 
+    this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -452,10 +471,10 @@ function createSkyTexture() {
   const context = canvas.getContext("2d");
 
   const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0.0, "#243445");
-  gradient.addColorStop(0.32, "#1b2835");
-  gradient.addColorStop(0.62, "#141c25");
-  gradient.addColorStop(1.0, "#10151b");
+  gradient.addColorStop(0.0, "#334155");
+  gradient.addColorStop(0.32, "#1e293b");
+  gradient.addColorStop(0.62, "#0f172a");
+  gradient.addColorStop(1.0, "#020617");
 
   context.fillStyle = gradient;
   context.fillRect(0, 0, canvas.width, canvas.height);

@@ -202,7 +202,7 @@ impl SimulationRuntime {
     }
 
     fn step_once(&mut self) {
-        let setpoint = self.controller.setpoint_at(self.time_s);
+        let setpoint = self.controller.fallback_setpoint(self.time_s);
         let motor_commands = self
             .controller
             .motor_commands(&self.vehicle, &self.state, self.time_s);
@@ -361,10 +361,14 @@ mod tests {
     #[test]
     fn front_flip_reaches_nearly_full_rotation() {
         let vehicle = Quadrotor::default();
-        let controller = QuadController {
-            maneuver_mode: crate::controller::ManeuverMode::FrontFlip,
-            ..QuadController::default()
-        };
+        let mut controller = QuadController::default();
+        controller.timeline.push(crate::controller::MissionAction::FrontFlip(crate::controller::FrontFlipManeuver {
+            start_time_s: 10.0,
+            duration_s: 1.45,
+            thrust_factor: 1.24,
+            max_pitch_torque_nm: 1.85,
+        }));
+        controller.timeline.sort_by(|a, b| a.start_time_s().partial_cmp(&b.start_time_s()).unwrap());
         let result = simulate(&vehicle, &controller, 0.01, 16.0);
         let max_pitch_unwrapped = result
             .samples
@@ -377,5 +381,32 @@ mod tests {
         assert!(max_pitch_unwrapped < 8.0);
         assert!((final_sample.pitch.to_degrees() - 3.0).abs() < 0.75);
         assert!(final_sample.q.abs() < 0.5);
+    }
+
+    #[test]
+    fn helix_maneuver_follows_curved_path() {
+        let vehicle = Quadrotor::default();
+        let mut controller = QuadController::default();
+        controller.timeline.push(crate::controller::MissionAction::Helix(crate::controller::HelixManeuver {
+            start_time_s: 10.0,
+            duration_s: 25.0,
+            radius_m: 3.0,
+            angular_velocity_rps: 0.6,
+            forward_velocity_mps: 8.0,
+        }));
+        controller.timeline.sort_by(|a, b| a.start_time_s().partial_cmp(&b.start_time_s()).unwrap());
+        // Run for enough time to see circles
+        let result = simulate(&vehicle, &controller, 0.01, 35.0);
+        let final_sample = result.samples.last().unwrap();
+
+        // Check horizontal displacement (should be moving forward in X)
+        assert!(final_sample.x > 40.0);
+        // Check altitude maintenance
+        assert!((final_sample.z - 30.0).abs() < 1.0);
+        
+        // Verify it was actually turning (check Y range)
+        let min_y = result.samples.iter().map(|s| s.y).fold(f64::INFINITY, f64::min);
+        let max_y = result.samples.iter().map(|s| s.y).fold(f64::NEG_INFINITY, f64::max);
+        assert!(max_y - min_y > 4.0);
     }
 }

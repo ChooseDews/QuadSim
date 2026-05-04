@@ -7,18 +7,18 @@ import {
 } from "lightweight-charts";
 
 const COLORS = {
-  green: "#58f0a7",
-  cyan: "#54b7ff",
-  amber: "#ffcf70",
-  orange: "#ff8a5b",
-  rose: "#ff6c87",
-  violet: "#9c89ff",
-  white: "#f5fbff",
-  grid: "rgba(129, 161, 193, 0.14)",
-  axis: "#8ea2b6",
-  border: "#1a222c",
-  panel: "#090d12",
-  muted: "#7d8a98",
+  green: "#10b981",
+  cyan: "#38bdf8",
+  amber: "#fbbf24",
+  orange: "#fb923c",
+  rose: "#f43f5e",
+  violet: "#8b5cf6",
+  white: "#f8fafc",
+  grid: "rgba(148, 163, 184, 0.1)",
+  axis: "#94a3b8",
+  border: "#1e293b",
+  panel: "#0f172a",
+  muted: "#64748b",
 };
 
 export class PlotBoard {
@@ -78,8 +78,8 @@ export class PlotBoard {
             format: (value) => `${value.toFixed(2)} deg`,
           },
           {
-            label: "pitch track",
-            values: samples.map((sample) => radToDeg(sample.pitch_unwrapped)),
+            label: "pitch",
+            values: samples.map((sample) => radToDeg(sample.pitch)),
             stroke: COLORS.green,
             format: (value) => `${value.toFixed(2)} deg`,
           },
@@ -160,6 +160,30 @@ export class PlotBoard {
         ],
       },
       {
+        elementId: "accelerationChart",
+        title: "Acceleration",
+        series: [
+          {
+            label: "ax",
+            values: samples.map((sample) => sample.ax),
+            stroke: COLORS.cyan,
+            format: (value) => `${value.toFixed(2)} m/s²`,
+          },
+          {
+            label: "ay",
+            values: samples.map((sample) => sample.ay),
+            stroke: COLORS.violet,
+            format: (value) => `${value.toFixed(2)} m/s²`,
+          },
+          {
+            label: "az",
+            values: samples.map((sample) => sample.az),
+            stroke: COLORS.green,
+            format: (value) => `${value.toFixed(2)} m/s²`,
+          },
+        ],
+      },
+      {
         elementId: "motorChart",
         title: "Motor Throttles",
         series: [
@@ -189,78 +213,6 @@ export class PlotBoard {
           },
         ],
         fixedRange: { min: 0, max: 1 },
-      },
-      {
-        elementId: "powerChart",
-        title: "Power",
-        series: [
-          {
-            label: "total",
-            values: samples.map((sample) => sample.power_total_w),
-            stroke: COLORS.amber,
-            format: (value) => `${value.toFixed(0)} W`,
-          },
-          {
-            label: "m1",
-            values: samples.map((sample) => sample.power_m1_w),
-            stroke: COLORS.green,
-            format: (value) => `${value.toFixed(0)} W`,
-          },
-          {
-            label: "m2",
-            values: samples.map((sample) => sample.power_m2_w),
-            stroke: COLORS.cyan,
-            format: (value) => `${value.toFixed(0)} W`,
-          },
-          {
-            label: "m3",
-            values: samples.map((sample) => sample.power_m3_w),
-            stroke: COLORS.violet,
-            format: (value) => `${value.toFixed(0)} W`,
-          },
-          {
-            label: "m4",
-            values: samples.map((sample) => sample.power_m4_w),
-            stroke: COLORS.rose,
-            format: (value) => `${value.toFixed(0)} W`,
-          },
-        ],
-      },
-      {
-        elementId: "currentChart",
-        title: "Current",
-        series: [
-          {
-            label: "total",
-            values: samples.map((sample) => sample.current_total_a),
-            stroke: COLORS.green,
-            format: (value) => `${value.toFixed(1)} A`,
-          },
-          {
-            label: "m1",
-            values: samples.map((sample) => sample.current_m1_a),
-            stroke: COLORS.cyan,
-            format: (value) => `${value.toFixed(1)} A`,
-          },
-          {
-            label: "m2",
-            values: samples.map((sample) => sample.current_m2_a),
-            stroke: COLORS.amber,
-            format: (value) => `${value.toFixed(1)} A`,
-          },
-          {
-            label: "m3",
-            values: samples.map((sample) => sample.current_m3_a),
-            stroke: COLORS.violet,
-            format: (value) => `${value.toFixed(1)} A`,
-          },
-          {
-            label: "m4",
-            values: samples.map((sample) => sample.current_m4_a),
-            stroke: COLORS.rose,
-            format: (value) => `${value.toFixed(1)} A`,
-          },
-        ],
       },
     ];
 
@@ -383,38 +335,33 @@ class TelemetryPlot {
     this.element.classList.add("lw-chart-host");
 
     this.header = document.createElement("div");
-    this.header.className = "plot-meta";
+    this.header.className = "plot-header-compact";
 
     const title = document.createElement("span");
-    title.className = "plot-title";
+    title.className = "plot-title-compact";
     title.textContent = this.title;
     this.header.appendChild(title);
 
     this.legend = document.createElement("div");
-    this.legend.className = "plot-legend";
+    this.legend.className = "plot-legend-compact";
     this.legendItems = this.seriesDefs.map((entry) => {
       const item = document.createElement("span");
-      item.className = "plot-legend-item";
+      item.className = "plot-legend-item-compact";
       item.innerHTML = `
-        <span class="plot-legend-swatch" style="background:${entry.stroke}"></span>
-        <span class="plot-legend-label">${entry.label}</span>
-        <span class="plot-legend-value"></span>
+        <span class="legend-label" style="color:${entry.stroke}">${entry.label}</span>
+        <span class="legend-value"></span>
       `;
       this.legend.appendChild(item);
       return {
         root: item,
-        value: item.querySelector(".plot-legend-value"),
+        value: item.querySelector(".legend-value"),
         format: entry.format ?? defaultFormatter,
       };
     });
     this.header.appendChild(this.legend);
 
-    this.selectionBadge = document.createElement("span");
-    this.selectionBadge.className = "plot-selection";
-    this.header.appendChild(this.selectionBadge);
-
     this.plotCanvas = document.createElement("div");
-    this.plotCanvas.className = "plot-canvas";
+    this.plotCanvas.className = "plot-canvas-compact";
 
     this.element.appendChild(this.header);
     this.element.appendChild(this.plotCanvas);
@@ -424,12 +371,12 @@ class TelemetryPlot {
     const tickFormatter = (time) => formatSeconds(this.timeToSeconds(time));
     const chart = createChart(this.plotCanvas, {
       width: Math.max(320, this.plotCanvas.clientWidth || 320),
-      height: 170,
+      height: this.showTimeAxis ? 160 : 130,
       layout: {
-        background: { type: ColorType.Solid, color: COLORS.panel },
+        background: { type: ColorType.Solid, color: "transparent" },
         textColor: COLORS.axis,
-        fontFamily: "IBM Plex Sans, system-ui, sans-serif",
-        fontSize: 11,
+        fontFamily: "Inter, system-ui, sans-serif",
+        fontSize: 10,
         attributionLogo: false,
       },
       grid: {
@@ -438,7 +385,8 @@ class TelemetryPlot {
       },
       rightPriceScale: {
         borderColor: COLORS.border,
-        scaleMargins: { top: 0.16, bottom: this.showTimeAxis ? 0.16 : 0.08 },
+        scaleMargins: { top: 0.1, bottom: this.showTimeAxis ? 0.2 : 0.05 },
+        minimumWidth: 65,
       },
       leftPriceScale: {
         visible: false,
@@ -452,7 +400,7 @@ class TelemetryPlot {
         fixRightEdge: true,
         rightOffset: 0,
         barSpacing: 6,
-        minimumHeight: this.showTimeAxis ? 24 : 0,
+        minimumHeight: this.showTimeAxis ? 20 : 0,
         tickMarkFormatter: tickFormatter,
       },
       crosshair: {
@@ -527,6 +475,17 @@ class TelemetryPlot {
       this.onVisibleLogicalRangeChange?.(this.getVisibleLogicalRange(), this);
     });
 
+    this.legendItems.forEach((item, index) => {
+      item.root.style.cursor = "pointer";
+      item.root.addEventListener("click", () => {
+        const api = this.seriesApis[index];
+        const def = this.seriesDefs[index];
+        def.visible = def.visible === false ? true : false;
+        api.applyOptions({ visible: def.visible });
+        item.root.style.opacity = def.visible ? "1.0" : "0.4";
+      });
+    });
+
     this.updateLegend(this.selectionIndex);
   }
 
@@ -572,7 +531,6 @@ class TelemetryPlot {
   }
 
   updateLegend(index) {
-    this.selectionBadge.textContent = formatSeconds(this.xValues[index] ?? 0);
     this.legendItems.forEach((item, seriesIndex) => {
       const value = this.seriesDefs[seriesIndex].values[index];
       item.value.textContent = value == null ? " -" : item.format(value);

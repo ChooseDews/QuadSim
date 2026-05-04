@@ -35,6 +35,10 @@ export class DashboardApp {
     this.fitChartsButton = document.getElementById("fitChartsButton");
     this.centerChartsButton = document.getElementById("centerChartsButton");
     this.liveRunButton = document.getElementById("liveRunButton");
+    this.tabButtons = document.querySelectorAll(".tab-button");
+    this.tabContents = document.querySelectorAll(".tab-content");
+    this.resizer = document.getElementById("resizer");
+    this.dashboardShell = document.getElementById("dashboardShell");
     this.thrustToWeightInput = document.getElementById("thrustToWeightInput");
     this.linearDragInput = document.getElementById("linearDragInput");
     this.angularDragInput = document.getElementById("angularDragInput");
@@ -48,6 +52,22 @@ export class DashboardApp {
     this.samplePose = document.getElementById("samplePose");
     this.sampleSpeed = document.getElementById("sampleSpeed");
     this.samplePower = document.getElementById("samplePower");
+    this.playIcon = document.getElementById("playIcon");
+    this.pauseIcon = document.getElementById("pauseIcon");
+    this.sceneSettingsButton = document.getElementById("sceneSettingsButton");
+    this.sceneSettingsPanel = document.getElementById("sceneSettingsPanel");
+    this.vehicleScaleInput = document.getElementById("vehicleScaleInput");
+    this.pathWidthInput = document.getElementById("pathWidthInput");
+    this.timelineContainer = document.getElementById("timelineContainer");
+    this.addTimelineEventBtn = document.getElementById("addTimelineEventBtn");
+    this.syncHoverCheckbox = document.getElementById("syncHoverCheckbox");
+
+    this.timeline = [
+      { id: 1, type: "setpoint", time_s: 0.0, altitude_m: 30.0, roll_deg: 0.0, pitch_deg: 3.0, yaw_deg: 0.0 },
+      { id: 2, type: "setpoint", time_s: 18.0, altitude_m: 30.0, roll_deg: 2.0, pitch_deg: 3.0, yaw_deg: 0.0 },
+      { id: 3, type: "helix", time_s: 10.0, duration_s: 15.0, radius_m: 3.0, forward_velocity_mps: 8.0, angular_velocity_rps: 0.6 }
+    ];
+    this.nextTimelineId = 4;
   }
 
   bindEvents() {
@@ -117,6 +137,181 @@ export class DashboardApp {
     this.centerChartsButton.addEventListener("click", () => {
       this.plots.centerOnSelection(this.activeIndex);
     });
+
+    this.tabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const tabId = button.dataset.tab;
+        this.setActiveTab(tabId);
+      });
+    });
+
+    this.sceneSettingsButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isVisible = this.sceneSettingsPanel.style.display === "flex";
+      this.sceneSettingsPanel.style.display = isVisible ? "none" : "flex";
+    });
+
+    document.addEventListener("click", () => {
+      this.sceneSettingsPanel.style.display = "none";
+    });
+
+    this.sceneSettingsPanel.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    this.vehicleScaleInput.addEventListener("input", () => {
+      this.scene.setVehicleScale(Number(this.vehicleScaleInput.value));
+    });
+
+    this.pathWidthInput.addEventListener("input", () => {
+      this.scene.setPathWidth(Number(this.pathWidthInput.value));
+    });
+
+    this.addTimelineEventBtn.addEventListener("click", () => {
+      this.timeline.push({
+        id: this.nextTimelineId++,
+        type: "setpoint",
+        time_s: 0.0,
+        altitude_m: 30.0,
+        roll_deg: 0.0,
+        pitch_deg: 0.0,
+        yaw_deg: 0.0
+      });
+      this.renderTimeline();
+    });
+
+    this.bindResizer();
+    this.renderTimeline();
+  }
+
+  renderTimeline() {
+    this.timelineContainer.innerHTML = "";
+    this.timeline.sort((a, b) => a.time_s - b.time_s).forEach((item) => {
+      const el = document.createElement("div");
+      el.className = "timeline-item";
+      
+      let paramsHtml = "";
+      if (item.type === "setpoint") {
+        paramsHtml = `
+          <label title="Target altitude in meters"><span>Alt [m]</span><input type="number" data-id="${item.id}" data-field="altitude_m" value="${item.altitude_m}" step="1" title="Target altitude in meters" /></label>
+          <label title="Target roll angle in degrees"><span>Roll [deg]</span><input type="number" data-id="${item.id}" data-field="roll_deg" value="${item.roll_deg}" step="0.5" title="Target roll angle in degrees" /></label>
+          <label title="Target pitch angle in degrees"><span>Pitch [deg]</span><input type="number" data-id="${item.id}" data-field="pitch_deg" value="${item.pitch_deg}" step="0.5" title="Target pitch angle in degrees" /></label>
+          <label title="Target yaw angle in degrees"><span>Yaw [deg]</span><input type="number" data-id="${item.id}" data-field="yaw_deg" value="${item.yaw_deg}" step="1" title="Target yaw angle in degrees" /></label>
+        `;
+      } else if (item.type === "front_flip") {
+        paramsHtml = ``; 
+      } else if (item.type === "helix") {
+        paramsHtml = `
+          <label title="Duration of the helix maneuver in seconds"><span>Duration [s]</span><input type="number" data-id="${item.id}" data-field="duration_s" value="${item.duration_s}" step="1" title="Duration of the helix maneuver in seconds" /></label>
+          <label title="Radius of the helix in meters"><span>Radius [m]</span><input type="number" data-id="${item.id}" data-field="radius_m" value="${item.radius_m}" step="0.5" title="Radius of the helix in meters" /></label>
+          <label title="Forward horizontal velocity in meters per second"><span>Fwd Vel [m/s]</span><input type="number" data-id="${item.id}" data-field="forward_velocity_mps" value="${item.forward_velocity_mps}" step="0.5" title="Forward horizontal velocity in meters per second" /></label>
+          <label title="Angular turn rate in radians per second"><span>Ang Vel [rad/s]</span><input type="number" data-id="${item.id}" data-field="angular_velocity_rps" value="${item.angular_velocity_rps}" step="0.1" title="Angular turn rate in radians per second" /></label>
+        `;
+      }
+
+      el.innerHTML = `
+        <div class="timeline-item-header">
+          <div class="timeline-item-title">
+            <select class="timeline-type-select" data-id="${item.id}" title="Type of mission action">
+              <option value="setpoint" ${item.type === "setpoint" ? "selected" : ""}>Setpoint</option>
+              <option value="front_flip" ${item.type === "front_flip" ? "selected" : ""}>Front Flip</option>
+              <option value="helix" ${item.type === "helix" ? "selected" : ""}>Helix</option>
+            </select>
+          </div>
+          <button type="button" class="timeline-remove-btn" data-id="${item.id}" title="Remove keyframe">✕</button>
+        </div>
+        <div class="timeline-grid">
+          <label title="Time in seconds when this action starts"><span>Time [s]</span><input type="number" data-id="${item.id}" data-field="time_s" value="${item.time_s}" step="0.5" title="Time in seconds when this action starts" /></label>
+          ${paramsHtml}
+        </div>
+      `;
+
+      this.timelineContainer.appendChild(el);
+    });
+
+    // Bind inputs
+    this.timelineContainer.querySelectorAll("input").forEach(input => {
+      input.addEventListener("change", (e) => {
+        const id = Number(e.target.dataset.id);
+        const field = e.target.dataset.field;
+        const val = Number(e.target.value);
+        const item = this.timeline.find(t => t.id === id);
+        if (item) {
+          item[field] = val;
+          if (field === "time_s") this.renderTimeline();
+        }
+      });
+    });
+
+    this.timelineContainer.querySelectorAll("select.timeline-type-select").forEach(select => {
+      select.addEventListener("change", (e) => {
+        const id = Number(e.target.dataset.id);
+        const type = e.target.value;
+        const item = this.timeline.find(t => t.id === id);
+        if (item) {
+          item.type = type;
+          if (type === "setpoint") {
+            item.altitude_m = item.altitude_m || 30.0;
+            item.roll_deg = item.roll_deg || 0.0;
+            item.pitch_deg = item.pitch_deg || 0.0;
+            item.yaw_deg = item.yaw_deg || 0.0;
+          } else if (type === "helix") {
+            item.duration_s = item.duration_s || 15.0;
+            item.radius_m = item.radius_m || 3.0;
+            item.forward_velocity_mps = item.forward_velocity_mps || 5.0;
+            item.angular_velocity_rps = item.angular_velocity_rps || 0.6;
+          }
+          this.renderTimeline();
+        }
+      });
+    });
+
+    this.timelineContainer.querySelectorAll(".timeline-remove-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const id = Number(e.target.dataset.id);
+        this.timeline = this.timeline.filter(t => t.id !== id);
+        this.renderTimeline();
+      });
+    });
+  }
+
+  bindResizer() {
+    let isResizing = false;
+
+    this.resizer.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isResizing) return;
+
+      const containerWidth = this.dashboardShell.clientWidth;
+      const percentage = (e.clientX / containerWidth) * 100;
+      const clamped = Math.min(Math.max(percentage, 20), 80);
+
+      this.dashboardShell.style.gridTemplateColumns = `${clamped}% 6px 1fr`;
+      this.scene.resize();
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = "default";
+        document.body.style.userSelect = "auto";
+        this.scene.resize();
+      }
+    });
+  }
+
+  setActiveTab(tabId) {
+    this.tabButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tabId);
+    });
+    this.tabContents.forEach((content) => {
+      content.classList.toggle("active", content.id === `tab-${tabId}`);
+    });
   }
 
   readConfigFromForm() {
@@ -124,18 +319,26 @@ export class DashboardApp {
     return {
       duration_s: Number(formData.get("duration_s")),
       dt_s: Number(formData.get("dt_s")),
-      altitude_m: Number(formData.get("altitude_m")),
+      steps_per_tick: 30,
       thrust_to_weight_ratio: Number(formData.get("thrust_to_weight_ratio")),
-      pitch_deg: Number(formData.get("pitch_deg")),
-      roll_step_deg: Number(formData.get("roll_step_deg")),
-      roll_step_time_s: Number(formData.get("roll_step_time_s")),
-      yaw_deg: Number(formData.get("yaw_deg")),
-      maneuver_mode: String(formData.get("maneuver_mode")),
-      maneuver_start_s: Number(formData.get("maneuver_start_s")),
-      steps_per_tick: Number(formData.get("steps_per_tick")),
       linear_drag_scale: Number(formData.get("linear_drag_scale")),
       angular_drag_scale: Number(formData.get("angular_drag_scale")),
       throttle_noise_std: Number(formData.get("throttle_noise_std")),
+      timeline: this.timeline.map(item => {
+        let t = { type: item.type, time_s: item.time_s };
+        if (item.type === "setpoint") {
+          t.altitude_m = item.altitude_m;
+          t.roll_deg = item.roll_deg;
+          t.pitch_deg = item.pitch_deg;
+          t.yaw_deg = item.yaw_deg;
+        } else if (item.type === "helix") {
+          t.duration_s = item.duration_s;
+          t.radius_m = item.radius_m;
+          t.forward_velocity_mps = item.forward_velocity_mps;
+          t.angular_velocity_rps = item.angular_velocity_rps;
+        }
+        return t;
+      })
     };
   }
 
@@ -176,6 +379,10 @@ export class DashboardApp {
 
   renderSummary(data) {
     const { summary, config, vehicle } = data;
+    
+    let maneuversCount = config.timeline.filter(t => t.type !== "setpoint").length;
+    let setpointsCount = config.timeline.filter(t => t.type === "setpoint").length;
+
     this.metricsGrid.innerHTML = [
       card("Cruise Speed", `${summary.cruise_speed_mps.toFixed(2)} m/s`),
       card("Cruise Power", `${summary.cruise_power_w.toFixed(0)} W`),
@@ -184,10 +391,8 @@ export class DashboardApp {
       card("Max Speed", `${summary.max_speed_mps.toFixed(2)} m/s`),
       card("T/W Ratio", `${vehicle.thrust_to_weight_ratio.toFixed(2)} : 1`),
       card("Hover Throttle", `${vehicle.hover_throttle.toFixed(3)}`),
-      card("Alt Cmd", `${config.altitude_m.toFixed(0)} m`),
-      card("Pitch Cmd", `${config.pitch_deg.toFixed(1)} deg`),
-      card("Roll Step", `${config.roll_step_deg.toFixed(1)} deg @ ${config.roll_step_time_s.toFixed(1)} s`),
-      card("Maneuver", config.maneuver_mode === "front_flip" ? `Front flip @ ${config.maneuver_start_s.toFixed(1)} s` : "None"),
+      card("Setpoints", `${setpointsCount}`),
+      card("Maneuvers", `${maneuversCount}`),
       card("Progress", `${data.steps_completed}/${data.total_steps} steps`),
     ].join("");
   }
@@ -221,7 +426,8 @@ export class DashboardApp {
   }
 
   startPlayback() {
-    this.playPauseButton.textContent = "Pause";
+    this.playIcon.style.display = "none";
+    this.pauseIcon.style.display = "block";
     this.playbackHandle = window.setInterval(() => {
       if (!this.data) {
         this.stopPlayback();
@@ -240,7 +446,8 @@ export class DashboardApp {
       window.clearInterval(this.playbackHandle);
       this.playbackHandle = null;
     }
-    this.playPauseButton.textContent = "Play";
+    this.playIcon.style.display = "block";
+    this.pauseIcon.style.display = "none";
   }
 
   stopLiveRun() {
@@ -253,6 +460,9 @@ export class DashboardApp {
 
   handlePlotSelection(index) {
     if (index === this.activeIndex || !this.data) {
+      return;
+    }
+    if (this.syncHoverCheckbox && !this.syncHoverCheckbox.checked) {
       return;
     }
     this.stopPlayback();
