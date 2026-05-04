@@ -8,6 +8,8 @@ Browser-based quadcopter simulation and flight-control lab: **mission planner** 
 
 ## Demo
 
+🚀 **[Try the live demo](https://choosedews.github.io/QuadSim/)**
+
 [Demo Video](https://github.com/user-attachments/assets/bfc97819-52d0-4e4a-b1be-28fd821d49f2)
 
 ## Mission planner
