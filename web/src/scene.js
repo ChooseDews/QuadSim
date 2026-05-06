@@ -14,8 +14,9 @@ export class QuadScene {
     this.viewMode = "track";
     this.lastFollowTarget = null;
     this.trajectoryMaterial = null;
-    this.vehicleScale = 2.4;
-    this.pathWidth = 4.5;
+    this.vehicleScale = 4.0;
+    this.pathWidth = 1.5;
+    this.pathField = "speed";
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -80,7 +81,9 @@ export class QuadScene {
     this.scene.add(rim);
 
     const grid = new THREE.GridHelper(900, 90, 0x334155, 0x1e293b);
+    grid.position.y = 0.01;
     this.scene.add(grid);
+    this.grid = grid;
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(1400, 1400),
@@ -93,6 +96,16 @@ export class QuadScene {
     floor.receiveShadow = true;
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
+    this.floor = floor;
+  }
+
+  setGroundLevel(level) {
+    if (this.grid) {
+      this.grid.position.y = level + 0.01;
+    }
+    if (this.floor) {
+      this.floor.position.y = level;
+    }
   }
 
   setDataset(data, { preserveTrackCamera = false } = {}) {
@@ -135,16 +148,28 @@ export class QuadScene {
     const points = samples.map((sample) => new THREE.Vector3(sample.x, sample.y, sample.z));
     const flatPositions = [];
     const flatColors = [];
-    const maxSpeed = Math.max(...samples.map((sample) => sample.speed), 0.1);
+    
+    let values = [];
+    if (this.pathField === "speed") {
+      values = samples.map(s => s.speed);
+    } else if (this.pathField === "altitude") {
+      values = samples.map(s => s.z);
+    } else if (this.pathField === "acceleration") {
+      values = samples.map(s => Math.sqrt(s.ax * s.ax + s.ay * s.ay + s.az * s.az));
+    } else if (this.pathField === "yaw") {
+      values = samples.map(s => s.yaw);
+    }
+
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values, minV + 0.1);
+
     for (const point of points) {
       flatPositions.push(point.x, point.y, point.z);
     }
-    for (const sample of samples) {
-      const color = new THREE.Color().setHSL(
-        THREE.MathUtils.lerp(0.58, 0.02, THREE.MathUtils.clamp(sample.speed / maxSpeed, 0, 1)),
-        0.8,
-        THREE.MathUtils.lerp(0.54, 0.6, THREE.MathUtils.clamp(sample.speed / maxSpeed, 0, 1)),
-      );
+    for (let i = 0; i < samples.length; i++) {
+      const v = values[i];
+      const t = Math.max(0, Math.min(1, (v - minV) / (maxV - minV)));
+      const color = new THREE.Color().setHSL(0.66 * (1.0 - t), 0.9, 0.5);
       flatColors.push(color.r, color.g, color.b);
     }
 
@@ -176,6 +201,13 @@ export class QuadScene {
     const finishMarker = marker(0xff8a5b);
     finishMarker.position.copy(points.at(-1));
     this.root.add(finishMarker);
+  }
+
+  setPathField(field) {
+    this.pathField = field;
+    if (this.dataset) {
+      this.buildTrajectory(this.dataset.samples);
+    }
   }
   buildVehicle(vehicle) {
     const frameMaterial = new THREE.MeshStandardMaterial({

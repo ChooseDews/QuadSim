@@ -37,6 +37,13 @@ pub struct HelixManeuver {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct PositionSetpoint {
+    pub start_time_s: f64,
+    pub position_m: Vec3,
+    pub yaw_rad: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct LandManeuver {
     pub start_time_s: f64,
 }
@@ -44,6 +51,7 @@ pub struct LandManeuver {
 #[derive(Clone, Copy, Debug)]
 pub enum MissionAction {
     Setpoint(AttitudeSetpoint),
+    Position(PositionSetpoint),
     FrontFlip(FrontFlipManeuver),
     Helix(HelixManeuver),
     Land(LandManeuver),
@@ -53,6 +61,7 @@ impl MissionAction {
     pub fn start_time_s(&self) -> f64 {
         match self {
             MissionAction::Setpoint(s) => s.start_time_s,
+            MissionAction::Position(p) => p.start_time_s,
             MissionAction::FrontFlip(f) => f.start_time_s,
             MissionAction::Helix(h) => h.start_time_s,
             MissionAction::Land(l) => l.start_time_s,
@@ -150,6 +159,12 @@ impl QuadController {
         let action = self.active_action(time_s);
 
         match action {
+            MissionAction::Setpoint(setpoint) => {
+                return self.track_setpoint(vehicle, state, setpoint);
+            }
+            MissionAction::Position(position) => {
+                return self.track_position(vehicle, state, position);
+            }
             MissionAction::FrontFlip(flip) => {
                 if time_s <= flip.start_time_s + flip.duration_s {
                     let fallback = self.fallback_setpoint(time_s);
@@ -162,11 +177,12 @@ impl QuadController {
                     return self.helix_commands(vehicle, state, fallback, helix, time_s);
                 }
             }
-            MissionAction::Setpoint(_) => {}
-            MissionAction::Land(_) => {}
+            MissionAction::Land(land) => {
+                return self.land_commands(vehicle, state, land, time_s);
+            }
         }
 
-        // Default Setpoint Tracking (either active action is a setpoint, or maneuver expired)
+        // Default Setpoint Tracking (e.g. if a maneuver expired)
         let setpoint = self.fallback_setpoint(time_s);
         self.track_setpoint(vehicle, state, setpoint)
     }
@@ -200,6 +216,74 @@ impl QuadController {
             + self.attitude_kd.component_mul(&rate_error);
 
         vehicle.commands_from_wrench(collective_thrust_n, body_torque_nm)
+    }
+
+    fn track_position(&self, vehicle: &Quadrotor, state: &State, position: PositionSetpoint) -> [f64; 4] {
+        let position_error = position.position_m - state.position_world_m;
+        let velocity_error = -state.velocity_world_mps;
+
+        let kp_xy = 0.8;
+        let kd_xy = 1.2;
+        let max_tilt_rad = 0.35;
+
+        let commanded_accel_xy = Vec3::new(
+            (kp_xy * position_error.x + kd_xy * velocity_error.x).clamp(-3.0, 3.0),
+            (kp_xy * position_error.y + kd_xy * velocity_error.y).clamp(-3.0, 3.0),
+            0.0,
+        );
+
+        let altitude_error = position.position_m.z - state.position_world_m.z;
+        let vertical_velocity_error = -state.velocity_world_mps.z;
+        let commanded_vertical_accel = self.altitude_kp * altitude_error + self.altitude_kd * vertical_velocity_error;
+
+        let rotation = state.rotation_body_to_world();
+        let body_z_world = rotation * Vec3::new(0.0, 0.0, 1.0);
+        let lift_projection = body_z_world.z.max(0.35);
+
+        let collective_thrust_n =
+            (vehicle.mass_kg * (vehicle.gravity_mps2 + commanded_vertical_accel)) / lift_projection;
+
+        let g = vehicle.gravity_mps2;
+        let pitch_target = (commanded_accel_xy.x / g).atan().clamp(-max_tilt_rad, max_tilt_rad);
+        let roll_target = (-commanded_accel_xy.y / g).atan().clamp(-max_tilt_rad, max_tilt_rad);
+
+        let euler_angles_rad = state.euler_angles_rad();
+        let attitude_error = Vec3::new(
+            roll_target - euler_angles_rad.x,
+            pitch_target - euler_angles_rad.y,
+            wrap_angle(position.yaw_rad - euler_angles_rad.z),
+        );
+
+        let rate_error = -state.angular_velocity_body_rps;
+        let body_torque_nm = self.attitude_kp.component_mul(&attitude_error)
+            + self.attitude_kd.component_mul(&rate_error);
+
+        vehicle.commands_from_wrench(collective_thrust_n, body_torque_nm)
+    }
+
+    fn land_commands(
+        &self,
+        vehicle: &Quadrotor,
+        state: &State,
+        land: LandManeuver,
+        time_s: f64,
+    ) -> [f64; 4] {
+        let altitude = state.position_world_m.z;
+        
+        if altitude < 0.05 && time_s > land.start_time_s + 1.0 {
+            return [0.0, 0.0, 0.0, 0.0];
+        }
+
+        let land_setpoint = AttitudeSetpoint {
+            start_time_s: land.start_time_s,
+            altitude_m: 0.0,
+            roll_rad: 0.0,
+            pitch_rad: 0.0,
+            yaw_rad: 0.0,
+            yaw_rate_rad_s: 0.0,
+        };
+
+        self.track_setpoint(vehicle, state, land_setpoint)
     }
 
     fn helix_commands(
@@ -254,6 +338,7 @@ impl QuadController {
         let euler_angles_rad = state.euler_angles_rad();
         let altitude_error = setpoint.altitude_m - state.position_world_m.z;
         let vertical_velocity_error = -state.velocity_world_mps.z;
+        
         let progress = ((time_s - flip.start_time_s) / flip.duration_s).clamp(0.0, 1.0);
         
         let desired_pitch_rate_rps =
@@ -268,13 +353,13 @@ impl QuadController {
             * thrust_shape
             + vehicle.mass_kg * (0.35 * altitude_error + 0.18 * vertical_velocity_error);
 
-        let roll_torque_nm = 3.4 * (setpoint.roll_rad - euler_angles_rad.x)
-            - 0.95 * state.angular_velocity_body_rps.x;
+        let roll_torque_nm = self.attitude_kp.x * (setpoint.roll_rad - euler_angles_rad.x)
+            + self.attitude_kd.x * (-state.angular_velocity_body_rps.x);
         let pitch_torque_nm = (vehicle.inertia_kg_m2[(1, 1)] * desired_pitch_accel_rps2
             + self.pitch_rate_kp * (desired_pitch_rate_rps - state.angular_velocity_body_rps.y))
             .clamp(-flip.max_pitch_torque_nm, flip.max_pitch_torque_nm);
-        let yaw_torque_nm = 2.0 * wrap_angle(setpoint.yaw_rad - euler_angles_rad.z)
-            - 0.55 * state.angular_velocity_body_rps.z;
+        let yaw_torque_nm = self.attitude_kp.z * wrap_angle(setpoint.yaw_rad - euler_angles_rad.z)
+            + self.attitude_kd.z * (-state.angular_velocity_body_rps.z);
 
         vehicle.commands_from_wrench(
             collective_thrust_n,

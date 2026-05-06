@@ -73,32 +73,32 @@ export class PlotBoard {
         series: [
           {
             label: "roll",
-            values: samples.map((sample) => radToDeg(sample.roll)),
+            values: unwrapAngles(samples.map((sample) => radToDeg(sample.roll))),
             stroke: COLORS.cyan,
             format: (value) => `${value.toFixed(2)} deg`,
           },
           {
             label: "pitch",
-            values: samples.map((sample) => radToDeg(sample.pitch)),
+            values: unwrapAngles(samples.map((sample) => radToDeg(sample.pitch))),
             stroke: COLORS.green,
             format: (value) => `${value.toFixed(2)} deg`,
           },
           {
             label: "yaw",
-            values: samples.map((sample) => radToDeg(sample.yaw)),
+            values: unwrapAngles(samples.map((sample) => radToDeg(sample.yaw))),
             stroke: COLORS.violet,
             format: (value) => `${value.toFixed(2)} deg`,
           },
           {
             label: "roll target",
-            values: samples.map((sample) => radToDeg(sample.roll_target)),
+            values: unwrapAngles(samples.map((sample) => radToDeg(sample.roll_target))),
             stroke: COLORS.orange,
             lineStyle: LineStyle.Dashed,
             format: (value) => `${value.toFixed(2)} deg`,
           },
           {
             label: "pitch target",
-            values: samples.map((sample) => radToDeg(sample.pitch_target)),
+            values: unwrapAngles(samples.map((sample) => radToDeg(sample.pitch_target))),
             stroke: COLORS.rose,
             lineStyle: LineStyle.Dashed,
             format: (value) => `${value.toFixed(2)} deg`,
@@ -586,4 +586,25 @@ function defaultFormatter(value) {
 
 function radToDeg(value) {
   return (value * 180) / Math.PI;
+}
+
+function unwrapAngles(angles) {
+  if (angles.length === 0) return angles;
+
+  const unwrapped = [angles[0]];
+  for (let i = 1; i < angles.length; i++) {
+    let diff = angles[i] - angles[i - 1];
+
+    // Detect jumps larger than 180 degrees
+    while (diff > 180) {
+      diff -= 360;
+    }
+    while (diff < -180) {
+      diff += 360;
+    }
+
+    unwrapped[i] = unwrapped[i - 1] + diff;
+  }
+
+  return unwrapped;
 }

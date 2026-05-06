@@ -13,6 +13,8 @@ pub struct BrowserSimulationConfig {
     pub linear_drag_scale: f64,
     pub angular_drag_scale: f64,
     pub throttle_noise_std: f64,
+    pub turbulence_intensity: f64,
+    pub motor_time_constant_s: f64,
     pub timeline: Vec<BrowserTimelineEvent>,
 }
 
@@ -27,6 +29,14 @@ pub enum BrowserTimelineEvent {
         pitch_deg: f64,
         yaw_deg: f64,
     },
+    #[serde(rename = "position")]
+    Position {
+        time_s: f64,
+        x_m: f64,
+        y_m: f64,
+        z_m: f64,
+        yaw_deg: f64,
+    },
     #[serde(rename = "front_flip")]
     FrontFlip {
         time_s: f64,
@@ -38,6 +48,10 @@ pub enum BrowserTimelineEvent {
         radius_m: f64,
         forward_velocity_mps: f64,
         angular_velocity_rps: f64,
+    },
+    #[serde(rename = "land")]
+    Land {
+        time_s: f64,
     }
 }
 
@@ -66,6 +80,8 @@ pub struct BrowserSimulationSummary {
     pub cruise_current_a: f64,
     pub peak_altitude_m: f64,
     pub max_speed_mps: f64,
+    pub total_energy_wh: f64,
+    pub touchdown_speed_mps: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -83,11 +99,13 @@ impl Default for BrowserSimulationConfig {
     fn default() -> Self {
         Self {
             dt_s: 0.01,
-            duration_s: 45.0,
+            duration_s: 60.0,
             thrust_to_weight_ratio: 2.25,
             linear_drag_scale: 1.0,
             angular_drag_scale: 1.0,
             throttle_noise_std: 0.0,
+            turbulence_intensity: 2.0,
+            motor_time_constant_s: 0.05,
             timeline: vec![
                 BrowserTimelineEvent::Setpoint {
                     time_s: 0.0,
@@ -96,15 +114,23 @@ impl Default for BrowserSimulationConfig {
                     pitch_deg: 3.0,
                     yaw_deg: 0.0,
                 },
+                BrowserTimelineEvent::FrontFlip { time_s: 8.0 },
                 BrowserTimelineEvent::FrontFlip { time_s: 12.0 },
-                BrowserTimelineEvent::FrontFlip { time_s: 18.0 },
                 BrowserTimelineEvent::Setpoint {
-                    time_s: 20.0,
-                    altitude_m: 10.0,
-                    roll_deg: -10.0,
-                    pitch_deg: 10.0,
+                    time_s: 18.0,
+                    altitude_m: 40.0,
+                    roll_deg: 2.0,
+                    pitch_deg: 3.0,
                     yaw_deg: 0.0,
                 },
+                BrowserTimelineEvent::Helix {
+                    time_s: 25.0,
+                    duration_s: 15.0,
+                    radius_m: 4.0,
+                    forward_velocity_mps: 8.0,
+                    angular_velocity_rps: 0.8,
+                },
+                BrowserTimelineEvent::Land { time_s: 50.0 },
             ],
         }
     }
@@ -126,6 +152,13 @@ impl BrowserSimulationConfig {
                         yaw_rate_rad_s: 0.0,
                     }));
                 }
+                BrowserTimelineEvent::Position { time_s, x_m, y_m, z_m, yaw_deg } => {
+                    timeline.push(crate::controller::MissionAction::Position(crate::controller::PositionSetpoint {
+                        start_time_s: *time_s,
+                        position_m: crate::math::Vec3::new(*x_m, *y_m, *z_m),
+                        yaw_rad: yaw_deg.to_radians(),
+                    }));
+                }
                 BrowserTimelineEvent::FrontFlip { time_s } => {
                     timeline.push(crate::controller::MissionAction::FrontFlip(crate::controller::FrontFlipManeuver {
                         start_time_s: *time_s,
@@ -141,6 +174,11 @@ impl BrowserSimulationConfig {
                         radius_m: *radius_m,
                         angular_velocity_rps: *angular_velocity_rps,
                         forward_velocity_mps: *forward_velocity_mps,
+                    }));
+                }
+                BrowserTimelineEvent::Land { time_s } => {
+                    timeline.push(crate::controller::MissionAction::Land(crate::controller::LandManeuver {
+                        start_time_s: *time_s,
                     }));
                 }
             }
@@ -171,6 +209,8 @@ impl BrowserSimulationConfig {
             linear_drag_scale: self.linear_drag_scale,
             angular_drag_scale: self.angular_drag_scale,
             throttle_noise_std: self.throttle_noise_std,
+            turbulence_intensity: self.turbulence_intensity,
+            motor_time_constant_s: self.motor_time_constant_s,
             noise_seed: 0x5eed_1234_5678_9abc,
         }
     }
@@ -213,6 +253,7 @@ pub fn simulate_dashboard_with_config(config: JsValue) -> Result<JsValue, JsValu
         result.samples,
         true,
         (config.duration_s / config.dt_s).round() as usize + 1,
+        None,
     )?;
 
     serde_wasm_bindgen::to_value(&dashboard)
@@ -260,6 +301,7 @@ impl BrowserSimulator {
             self.runtime.samples().to_vec(),
             self.runtime.is_complete(),
             self.runtime.total_steps(),
+            self.runtime.touchdown_speed_mps(),
         )?;
         serde_wasm_bindgen::to_value(&dashboard)
             .map_err(|error| JsValue::from_str(&format!("serialization failed: {error}")))
@@ -280,6 +322,7 @@ fn dashboard_from_samples(
     samples: Vec<Sample>,
     completed: bool,
     total_steps: usize,
+    touchdown_speed_mps: Option<f64>,
 ) -> Result<BrowserDashboardData, JsValue> {
     let final_sample = samples
         .last()
@@ -339,6 +382,8 @@ fn dashboard_from_samples(
             cruise_current_a,
             peak_altitude_m,
             max_speed_mps,
+            total_energy_wh: final_sample.energy_wh,
+            touchdown_speed_mps,
         },
         steps_completed: samples.len(),
         total_steps,

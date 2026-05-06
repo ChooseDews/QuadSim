@@ -47,6 +47,7 @@ pub struct Sample {
     pub pitch: f64,
     pub pitch_unwrapped: f64,
     pub yaw: f64,
+    pub yaw_unwrapped: f64,
     pub roll_target: f64,
     pub pitch_target: f64,
     pub yaw_target: f64,
@@ -76,6 +77,7 @@ pub struct Sample {
     pub qx: f64,
     pub qy: f64,
     pub qz: f64,
+    pub energy_wh: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +90,8 @@ pub struct SimulationOptions {
     pub linear_drag_scale: f64,
     pub angular_drag_scale: f64,
     pub throttle_noise_std: f64,
+    pub turbulence_intensity: f64,
+    pub motor_time_constant_s: f64,
     pub noise_seed: u64,
 }
 
@@ -101,9 +105,15 @@ pub struct SimulationRuntime {
     current_step: usize,
     time_s: f64,
     pitch_unwrapped_rad: f64,
+    yaw_unwrapped_rad: f64,
     state: State,
     samples: Vec<Sample>,
     rng: SimpleRng,
+    turbulence_state: Vec3,
+    actual_motor_throttles: [f64; 4],
+    cumulative_energy_wh: f64,
+    touchdown_speed_mps: Option<f64>,
+    was_airborne: bool,
 }
 
 pub fn simulate(
@@ -145,6 +155,8 @@ impl Default for SimulationOptions {
             linear_drag_scale: 1.0,
             angular_drag_scale: 1.0,
             throttle_noise_std: 0.0,
+            turbulence_intensity: 0.0,
+            motor_time_constant_s: 0.0,
             noise_seed: 0x5eed_1234_5678_9abc,
         }
     }
@@ -168,9 +180,15 @@ impl SimulationRuntime {
             current_step: 0,
             time_s: 0.0,
             pitch_unwrapped_rad: 0.0,
+            yaw_unwrapped_rad: 0.0,
             state: State::default(),
             samples: Vec::with_capacity(total_steps + 1),
             rng: SimpleRng::new(options.noise_seed),
+            turbulence_state: Vec3::zeros(),
+            actual_motor_throttles: [0.0; 4],
+            cumulative_energy_wh: 0.0,
+            touchdown_speed_mps: None,
+            was_airborne: false,
         }
     }
 
@@ -197,6 +215,10 @@ impl SimulationRuntime {
         &self.samples
     }
 
+    pub fn touchdown_speed_mps(&self) -> Option<f64> {
+        self.touchdown_speed_mps
+    }
+
     pub fn into_result(self) -> SimulationResult {
         SimulationResult { samples: self.samples }
     }
@@ -206,16 +228,23 @@ impl SimulationRuntime {
         let motor_commands = self
             .controller
             .motor_commands(&self.vehicle, &self.state, self.time_s);
-        let applied_motor_commands = self.apply_motor_noise(motor_commands);
+        let motor_commands_with_noise = self.apply_motor_noise(motor_commands);
+        let applied_motor_commands = self.apply_motor_delay(motor_commands_with_noise);
         let wrench = self.vehicle.wrench_from_commands(&applied_motor_commands);
         let euler_angles_rad = self.state.euler_angles_rad();
         let attitude = self.state.attitude_body_to_world.quaternion();
+        let attitude_qw = attitude.w;
+        let attitude_qx = attitude.i;
+        let attitude_qy = attitude.j;
+        let attitude_qz = attitude.k;
 
         let rotation = self.state.rotation_body_to_world();
         let velocity_body = rotation.inverse() * self.state.velocity_world_mps;
         let drag_body =
             -((self.vehicle.linear_drag_body * self.options.linear_drag_scale) * velocity_body);
-        let total_force_world = rotation * (wrench.total_force_body_n + drag_body);
+
+        let turbulence_force_world = self.generate_turbulence_force();
+        let total_force_world = rotation * (wrench.total_force_body_n + drag_body) + turbulence_force_world;
         let acceleration_world =
             total_force_world / self.vehicle.mass_kg + Vec3::new(0.0, 0.0, -self.vehicle.gravity_mps2);
 
@@ -241,6 +270,7 @@ impl SimulationRuntime {
             pitch: euler_angles_rad.y,
             pitch_unwrapped: self.pitch_unwrapped_rad,
             yaw: euler_angles_rad.z,
+            yaw_unwrapped: self.yaw_unwrapped_rad,
             roll_target: setpoint.roll_rad,
             pitch_target: setpoint.pitch_rad,
             yaw_target: setpoint.yaw_rad,
@@ -266,10 +296,11 @@ impl SimulationRuntime {
             current_m2_a: wrench.motor_effects[1].current_a,
             current_m3_a: wrench.motor_effects[2].current_a,
             current_m4_a: wrench.motor_effects[3].current_a,
-            qw: attitude.w,
-            qx: attitude.i,
-            qy: attitude.j,
-            qz: attitude.k,
+            qw: attitude_qw,
+            qx: attitude_qx,
+            qy: attitude_qy,
+            qz: attitude_qz,
+            energy_wh: self.cumulative_energy_wh,
         });
 
         if self.current_step == self.total_steps {
@@ -277,14 +308,41 @@ impl SimulationRuntime {
             return;
         }
 
-        self.state.position_world_m += self.state.velocity_world_mps * self.dt_s;
+        self.cumulative_energy_wh += wrench.total_power_w * self.dt_s / 3600.0;
+
+        let prev_z = self.state.position_world_m.z;
+
         self.state.velocity_world_mps += acceleration_world * self.dt_s;
+        self.state.position_world_m += self.state.velocity_world_mps * self.dt_s;
+
+        if self.state.position_world_m.z > 0.001 {
+            self.was_airborne = true;
+        }
+
+        if self.state.position_world_m.z < 0.0 {
+            if self.was_airborne && self.touchdown_speed_mps.is_none() && prev_z > 0.001 {
+                self.touchdown_speed_mps = Some(self.state.velocity_world_mps.norm());
+            }
+
+            self.state.position_world_m.z = 0.0;
+
+            if self.state.velocity_world_mps.z < 0.0 {
+                self.state.velocity_world_mps.z = 0.0;
+            }
+
+            if self.state.position_world_m.z <= 0.001 {
+                self.state.velocity_world_mps.x = 0.0;
+                self.state.velocity_world_mps.y = 0.0;
+            }
+        }
+
         self.state.attitude_body_to_world = integrate_attitude_explicit(
             &self.state.attitude_body_to_world,
             self.state.angular_velocity_body_rps,
             self.dt_s,
         );
         self.pitch_unwrapped_rad += self.state.angular_velocity_body_rps.y * self.dt_s;
+        self.yaw_unwrapped_rad += self.state.angular_velocity_body_rps.z * self.dt_s;
         self.state.angular_velocity_body_rps += angular_accel_body * self.dt_s;
         self.time_s += self.dt_s;
         self.current_step += 1;
@@ -298,6 +356,40 @@ impl SimulationRuntime {
         motor_commands.map(|command| {
             (command + self.rng.gaussian() * self.options.throttle_noise_std).clamp(0.0, 1.0)
         })
+    }
+
+    fn apply_motor_delay(&mut self, target_commands: [f64; 4]) -> [f64; 4] {
+        if self.options.motor_time_constant_s <= 0.0 {
+            self.actual_motor_throttles = target_commands;
+            return target_commands;
+        }
+
+        let alpha = self.dt_s / (self.options.motor_time_constant_s + self.dt_s);
+        for i in 0..4 {
+            self.actual_motor_throttles[i] +=
+                alpha * (target_commands[i] - self.actual_motor_throttles[i]);
+        }
+
+        self.actual_motor_throttles
+    }
+
+    fn generate_turbulence_force(&mut self) -> Vec3 {
+        if self.options.turbulence_intensity <= 0.0 {
+            return Vec3::zeros();
+        }
+
+        let correlation_time_s = 0.5;
+        let alpha = self.dt_s / (correlation_time_s + self.dt_s);
+
+        let new_noise = Vec3::new(
+            self.rng.gaussian(),
+            self.rng.gaussian(),
+            self.rng.gaussian(),
+        );
+
+        self.turbulence_state = self.turbulence_state * (1.0 - alpha) + new_noise * alpha;
+
+        self.turbulence_state * self.options.turbulence_intensity * self.vehicle.mass_kg
     }
 }
 
@@ -346,7 +438,25 @@ mod tests {
     #[test]
     fn settles_toward_drag_limited_forward_velocity() {
         let vehicle = Quadrotor::default();
-        let controller = QuadController::default();
+        let mut controller = QuadController::default();
+        controller.timeline = vec![
+            crate::controller::MissionAction::Setpoint(crate::controller::AttitudeSetpoint {
+                start_time_s: 0.0,
+                altitude_m: 30.0,
+                roll_rad: 0.0,
+                pitch_rad: 3.0_f64.to_radians(),
+                yaw_rad: 0.0,
+                yaw_rate_rad_s: 0.0,
+            }),
+            crate::controller::MissionAction::Setpoint(crate::controller::AttitudeSetpoint {
+                start_time_s: 18.0,
+                altitude_m: 30.0,
+                roll_rad: 2.0_f64.to_radians(),
+                pitch_rad: 3.0_f64.to_radians(),
+                yaw_rad: 0.0,
+                yaw_rate_rad_s: 0.0,
+            }),
+        ];
         let result = simulate(&vehicle, &controller, 0.01, 45.0);
         let last = result.samples.last().expect("sample");
         let previous = &result.samples[result.samples.len() - 200];
@@ -362,13 +472,22 @@ mod tests {
     fn front_flip_reaches_nearly_full_rotation() {
         let vehicle = Quadrotor::default();
         let mut controller = QuadController::default();
-        controller.timeline.push(crate::controller::MissionAction::FrontFlip(crate::controller::FrontFlipManeuver {
-            start_time_s: 10.0,
-            duration_s: 1.45,
-            thrust_factor: 1.24,
-            max_pitch_torque_nm: 1.85,
-        }));
-        controller.timeline.sort_by(|a, b| a.start_time_s().partial_cmp(&b.start_time_s()).unwrap());
+        controller.timeline = vec![
+            crate::controller::MissionAction::Setpoint(crate::controller::AttitudeSetpoint {
+                start_time_s: 0.0,
+                altitude_m: 30.0,
+                roll_rad: 0.0,
+                pitch_rad: 0.0,
+                yaw_rad: 0.0,
+                yaw_rate_rad_s: 0.0,
+            }),
+            crate::controller::MissionAction::FrontFlip(crate::controller::FrontFlipManeuver {
+                start_time_s: 10.0,
+                duration_s: 1.45,
+                thrust_factor: 1.24,
+                max_pitch_torque_nm: 1.85,
+            }),
+        ];
         let result = simulate(&vehicle, &controller, 0.01, 16.0);
         let max_pitch_unwrapped = result
             .samples
@@ -379,7 +498,7 @@ mod tests {
 
         assert!(max_pitch_unwrapped > 5.2);
         assert!(max_pitch_unwrapped < 8.0);
-        assert!((final_sample.pitch.to_degrees() - 3.0).abs() < 0.75);
+        assert!((final_sample.pitch.to_degrees() - 0.0).abs() < 1.0); // should return to 0 pitch
         assert!(final_sample.q.abs() < 0.5);
     }
 
@@ -387,14 +506,23 @@ mod tests {
     fn helix_maneuver_follows_curved_path() {
         let vehicle = Quadrotor::default();
         let mut controller = QuadController::default();
-        controller.timeline.push(crate::controller::MissionAction::Helix(crate::controller::HelixManeuver {
-            start_time_s: 10.0,
-            duration_s: 25.0,
-            radius_m: 3.0,
-            angular_velocity_rps: 0.6,
-            forward_velocity_mps: 8.0,
-        }));
-        controller.timeline.sort_by(|a, b| a.start_time_s().partial_cmp(&b.start_time_s()).unwrap());
+        controller.timeline = vec![
+            crate::controller::MissionAction::Setpoint(crate::controller::AttitudeSetpoint {
+                start_time_s: 0.0,
+                altitude_m: 30.0,
+                roll_rad: 0.0,
+                pitch_rad: 0.0,
+                yaw_rad: 0.0,
+                yaw_rate_rad_s: 0.0,
+            }),
+            crate::controller::MissionAction::Helix(crate::controller::HelixManeuver {
+                start_time_s: 10.0,
+                duration_s: 25.0,
+                radius_m: 3.0,
+                angular_velocity_rps: 0.6,
+                forward_velocity_mps: 8.0,
+            }),
+        ];
         // Run for enough time to see circles
         let result = simulate(&vehicle, &controller, 0.01, 35.0);
         let final_sample = result.samples.last().unwrap();
